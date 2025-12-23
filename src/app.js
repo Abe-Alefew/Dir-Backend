@@ -15,14 +15,13 @@ dotenv.config();
 const app = express();
 
 // mounting better-auth routes
-app.all("/api/auth/*", toNodeHandler(auth));
+app.all("/api/auth/", toNodeHandler(auth));
 
 //middlewares
 app.use(express.json());
 
 //routes
-// app routes
-app.use("/api/users", userRouter);
+app.use("/api/users",  userRouter);
 
 //global and 404 error handling middlewares
 app.use(routeNotFound);

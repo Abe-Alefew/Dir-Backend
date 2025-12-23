@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const accountSchema = new mongoose.Schema(
+export const accountSchema = new mongoose.Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -40,4 +40,5 @@ accountSchema.index(
   { unique: true }
 );
 
-export default mongoose.model("Account", accountSchema);
+const Account = mongoose.model("Account", accountSchema);
+export default Account;
