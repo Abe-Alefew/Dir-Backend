@@ -3,13 +3,11 @@ import mongoose from "mongoose";
 const userSchema = new mongoose.Schema(
   {
     //github profile fields
-    githubUserName: {
+    githubUsername: {
       type: String,
-      required: true,
       trim: true,
-      unique: true,
     },
-    gitHubID: {
+    githubId: {
       type: String,
       required: true,
       unique: true,
