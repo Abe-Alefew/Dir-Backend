@@ -3,8 +3,6 @@ import { Strategy as GitHubStrategy } from "passport-github2";
 import { User } from "../models/user.model.js";
 import { Repository } from "../models/repository.model.js";
 import { Notification } from "../models/notification.model.js";
-import axios from "axios";
-import crypto from "crypto";
 import { repositoryService } from "../services/github.service.js";
 import { createGitHubClient } from "../config/github.js";
 

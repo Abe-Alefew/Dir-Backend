@@ -2,14 +2,29 @@ import { StatusCodes } from "http-status-codes";
 import { User } from "../models/user.model.js";
 import { Repository } from "../models/repository.model.js";
 import { Notification } from "../models/notification.model.js";
+import { getOrSetCache } from "../utils/cache.util.js";
+import redisClient from "../config/redis.js";
+
+
+// cache keys
+const getUserKey = (userId) => `user:profile:${userId}`;
+const getStatsKey = (userId) => `user:stats:${userId}`;
+
+
 //@desc   Get user profile after authentication
 export const getMe = async (req, res) => {
   try {
     const userId = req.user._id;
+    const cacheKey = getUserKey(userId);
+
     //populate the repose
-    const user = await User.findById(userId)
+    const user = await getOrSetCache(cacheKey, async () => {
+      const userData = await User.findById(userId)
       .populate("reposOwned")
-      .select("-__v");
+      .select("-__v")
+      .lean();
+      return userData;
+    })
     if (!user) {
       return res
         .status(StatusCodes.NOT_FOUND)
@@ -31,22 +46,30 @@ export const getMe = async (req, res) => {
 export const getUserStats = async (req, res) => {
   try {
     const userId = req.user._id;
-    //count number of repositories owned
+    const cacheKey = getStatsKey(userId);
+
+    // caching
+    const stats = await getOrSetCache(cacheKey, async () =>{
+      //count number of repositories owned
     //count the number documents in Repository collection with ownerId as userId
     const [activeWorkspacesCount, unreadNotifications] = await Promise.all([
       Repository.countDocuments({ ownerId: userId }),
       Notification.countDocuments({ userId: userId, isRead: false }),
     ]);
+
+    return {
+      activeWorkspacesCount,
+      unreadNotifications,
+      githubTotalCount: req.user.githubRepoCount,
+      totalTasks: 0,
+      role:req.user.role,
+    };
+    }, 600)// less TTL - 10 min cuz stats change frequently
+    
     res.status(StatusCodes.OK).json({
       status: "success",
-      data: {
-        activeWorkspacesCount,
-        unreadNotifications,
-        githubTotalCount: req.user.githubRepoCount,
-        totalTasks: 0,
-        role: req.user.role,
-      },
-    });
+      data: stats
+    }); 
   } catch (error) {
     res
       .status(StatusCodes.INTERNAL_SERVER_ERROR)
@@ -75,6 +98,9 @@ export const updatedProfile = async (req, res) => {
       },
       { new: true, runValidators: true }
     ).select("-__v");
+
+    // cache invalidation
+    await redisClient.del(getUserKey(req.user._id))
 
     res.status(StatusCodes.OK).json({
       status: "success",
