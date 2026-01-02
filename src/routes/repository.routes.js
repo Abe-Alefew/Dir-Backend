@@ -9,6 +9,12 @@ repoRouter.use(authMiddleware);
 repoRouter.get("/discovery", repoController.getGithubRepos); 
 repoRouter.post('/import', repoController.importRepo);
 
+//creating repos and workspaces
+repoRouter.post('/create-workspace', repoController.createWorkspace);
+repoRouter.post('/create-remote', repoController.createRemoteRepo);
+
+//repository file management 
+repoRouter.get('/contents', repoController.getContents);
 //CRUD functinoalities 
 repoRouter.get('/', repoController.getActiveRepos); 
 repoRouter.get('/:id', repoController.getActiveRepo); 
