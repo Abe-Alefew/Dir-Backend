@@ -21,12 +21,14 @@ export const getGithubRepos = async (req, res) => {
       ownerId: req.user._id,
     }).select("githubId -_id");
     const importedIds = new Set(
-      importedRepos.filter(repo => repo.githubId).map((repo) => repo.githubId.toString())
+      importedRepos
+        .filter((repo) => repo.githubId)
+        .map((repo) => repo.githubId.toString())
     );
 
     const discoveryList = githubRepos.map((repo) => ({
       githubId: repo.id.toString(),
-      name: repo.name,
+      workspaceName: repo.name,
       fullName: repo.full_name,
       isImported: importedIds.has(repo.id.toString()),
       description: repo.description,
@@ -52,7 +54,7 @@ export const importRepo = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const { githubId, name, description, url, language } = req.body;
+    const { githubId, githubRepoName, githubOwner, githubFullName, description, url, language } = req.body;
 
     //check if repo already imported
     const existingRepo = await Repository.findOne({ githubId });
@@ -67,7 +69,10 @@ export const importRepo = async (req, res) => {
       [
         {
           githubId,
-          name,
+          githubRepoName,
+          githubOwner,
+          githubFullName,
+          workspaceName: githubRepoName,
           description,
           ownerId: req.user._id,
           url,
@@ -111,13 +116,30 @@ export const importRepo = async (req, res) => {
 export const getActiveRepos = async (req, res) => {
   try {
     const { search, tag } = req.query;
+    //fetch query to get al the repos where user is a member
     let query = { "members.userId": req.user._id };
 
-    if (search) query.name = { $regex: search, $options: "i" };
-    if (tag) query.tags = tag;
+    if (tag) {
+      query.tags = tag;
+    }
+
+    //search across workspaceName, githubRepoName and tags
+    if (search) {
+      const searchRegex = { $regex: search, $options: "i" };
+      query.$or = [
+        { workspaceName: searchRegex },
+        { githubRepoName: searchRegex },
+        { tags: searchRegex }, //search for custom tags as well
+      ];
+    }
 
     const repos = await Repository.find(query).select("-webhookEvents");
-    res.status(StatusCodes.OK).json({ status: "success", data: repos });
+
+    res.status(StatusCodes.OK).json({
+      status: "success",
+      results: repos.length,
+      data: repos,
+    });
   } catch (error) {
     res
       .status(StatusCodes.INTERNAL_SERVER_ERROR)
@@ -153,24 +175,33 @@ export const getActiveRepo = async (req, res) => {
 export const manualSync = async (req, res) => {
   try {
     const repo = await Repository.findById(req.params.id);
+    if (!repo)
+      return res.status(StatusCodes.NOT_FOUND).json({ message: "Not found" });
+
     const octokit = createGitHubClient(req.user.accessToken);
 
-    //fetch the repo from github using the stored owner and repo
-    const { data: githubData } = await octokit.rest.repos.get({
-      owner: req.user.githubUsername,
-      repo: repo.name,
+    // sync using
+    const { data: githubRepo } = await octokit.rest.repos.get({
+      owner: repo.githubOwner,
+      repo: repo.githubRepoName,
     });
-    repo.description = githubData.description;
-    repo.language = githubData.language; //to update the current programming language in dir from github
+
+    repo.description = githubRepo.description;
+    repo.language = githubRepo.language;
+    repo.isPrivate = githubRepo.private;
+    //here only change the remote github repo name if user has changed it in github
+    repo.githubRepoName = githubRepo.name;
+    repo.githubFullName = githubRepo.full_name;
+
     await repo.save();
 
     res
       .status(StatusCodes.OK)
-      .json({ status: "success", message: "Synced with Github" });
+      .json({ status: "success", message: "Synced with GitHub" });
   } catch (error) {
     res
       .status(StatusCodes.INTERNAL_SERVER_ERROR)
-      .json({ status: "error", message: error.message });
+      .json({ message: error.message });
   }
 };
 
@@ -179,39 +210,40 @@ export const manualSync = async (req, res) => {
 export const updateRepo = async (req, res) => {
   try {
     if (!req.body) {
-      return res.status(StatusCodes.BAD_REQUEST).json({ 
-        message: "Request body is missing. Check your JSON format." 
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        message: "Request body is missing. Check your JSON format.",
       });
     }
-    const { id} = req.params; 
-    const {name, description} = req.body; 
+    const { id } = req.params;
+    const { workspaceName, description } = req.body;
 
-    if (name !== undefined && name.trim() === "") {
+    if (workspaceName !== undefined && workspaceName.trim() === "") {
       return res.status(StatusCodes.BAD_REQUEST).json({
         status: "error",
-        message: "Repository name cannot be empty"
+        message: "Repository name cannot be empty",
       });
     }
 
-    //repo inside of the database 
-    const repo = await Repository.findById(id); 
-    if(!repo){
-      return res.status(StatusCodes.NOT_FOUND).json({message: "workspace not found"});
+    //repo inside of the database
+    const repo = await Repository.findById(id);
+    if (!repo) {
+      return res
+        .status(StatusCodes.NOT_FOUND)
+        .json({ message: "workspace not found" });
     }
 
     const okctokit = createGitHubClient(req.user.accessToken);
 
-    //update the repo in github also 
+    //update the repo in github also
     const githubUpdate = {
-      owner: req.user.githubUsername,
-      repo: repo.name,
+      owner: repo.githubOwner, 
+      repo: repo.githubRepoName,
     };
 
-    if(name) githubUpdate.name = name;
-    if(description !== undefined && description !== null) githubUpdate.description = description;
+    if (description !== undefined && description !== null)
+      githubUpdate.description = description;
 
     await okctokit.rest.repos.update(githubUpdate);
-
 
     const updatedRepo = await Repository.findByIdAndUpdate(
       req.params.id,
@@ -220,10 +252,10 @@ export const updateRepo = async (req, res) => {
     );
 
     //@todo: after update also try to update the githbub repo via api if name/description changed
-    res.status(StatusCodes.OK).json({ 
-      status: "success", 
+    res.status(StatusCodes.OK).json({
+      status: "success",
       message: "Updated locally and on GitHub",
-      data: updatedRepo 
+      data: updatedRepo,
     });
   } catch (error) {
     res.status(StatusCodes.BAD_REQUEST).json({ message: error.message });
@@ -256,7 +288,7 @@ export const deleteRepo = async (req, res) => {
     await User.findByIdAndUpdate(req.user._id, {
       $pull: { reposOwned: req.params.id },
     });
-    //@todo: also make the status of the github to be just normal github not workspace 
+
     res
       .status(StatusCodes.OK)
       .json({ status: "success", message: "Removed from DIR" });
@@ -267,6 +299,92 @@ export const deleteRepo = async (req, res) => {
   }
 };
 
+//@desc Create a new workspace by providing a GitHub repo name and a custom Dir name
+//@route POST /api/repos/create-workspace
+export const createWorkspace = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const { workspaceName, description, githubRepoName } = req.body;
+
+    if (!githubRepoName || !workspaceName) {
+      return res
+        .status(StatusCodes.BAD_REQUEST)
+        .json({ message: "Workspace name and Repo name are required" });
+    }
+
+    // connect to github to verify the repo actually exists under user's account
+    const octokit = createGitHubClient(req.user.accessToken);
+    const { data: githubRepo } = await octokit.rest.repos.get({
+      owner: req.user.githubUsername,
+      repo: githubRepoName,
+    });
+
+    // check the import state in dir for the specifc github repo
+    const existingRepo = await Repository.findOne({
+      githubId: githubRepo.id.toString(),
+    });
+    if (existingRepo) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        message: "This repository is already connected to a workspace",
+      });
+    }
+
+    // Create the new Workspace document in repository collection
+    const newRepo = await Repository.create(
+      [
+        {
+          githubId: githubRepo.id.toString(),
+          githubRepoName: githubRepo.name, // github repo name
+          githubOwner: githubRepo.owner.login, // github owner name
+          githubFullName: githubRepo.full_name, // owner/repo format
+          workspaceName:
+            workspaceName && workspaceName.trim() !== ""
+              ? workspaceName
+              : githubRepo.name,
+          description: description || githubRepo.description,
+          ownerId: req.user._id,
+          url: githubRepo.html_url,
+          isPrivate: githubRepo.private,
+          language: githubRepo.language,
+          members: [{ userId: req.user._id, role: "owner" }],
+          channels: [
+            { name: "general", channel_id: new mongoose.Types.ObjectId() },
+          ],
+        },
+      ],
+      { session }
+    );
+
+    // Update user's list
+    await User.findByIdAndUpdate(
+      req.user._id,
+      { $push: { reposOwned: newRepo[0]._id } }, //this is to add the number of workspaces owned by user
+      { session }
+    );
+
+    await session.commitTransaction();
+    res
+      .status(StatusCodes.CREATED)
+      .json({ status: "success", data: newRepo[0] });
+  } catch (error) {
+    await session.abortTransaction();
+    res
+      .status(
+        error.status === 404
+          ? StatusCodes.NOT_FOUND
+          : StatusCodes.INTERNAL_SERVER_ERROR
+      )
+      .json({
+        message:
+          error.status === 404
+            ? "GitHub repository not found under your account"
+            : error.message,
+      });
+  } finally {
+    session.endSession();
+  }
+};
 
 //@todo: add a controller to create repo in github from dir directly
 //@todo: also a controller to delete directly from dir to github
