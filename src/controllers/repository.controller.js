@@ -28,12 +28,14 @@ export const getGithubRepos = async (req, res) => {
 
     const discoveryList = githubRepos.map((repo) => ({
       githubId: repo.id.toString(),
-      workspaceName: repo.name,
-      fullName: repo.full_name,
+      githubRepoName: repo.name,      
+      githubOwner: repo.owner.login,  
+      githubFullName: repo.full_name, 
+      description: repo.description,  
+      url: repo.html_url,             
+      language: repo.language,    
+      workspaceName: repo.name,       
       isImported: importedIds.has(repo.id.toString()),
-      description: repo.description,
-      url: repo.html_url,
-      language: repo.language,
     }));
     res.status(StatusCodes.OK).json({
       status: "success",
