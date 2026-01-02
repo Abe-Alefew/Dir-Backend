@@ -178,13 +178,53 @@ export const manualSync = async (req, res) => {
 //@route PATCH /api/repos/:id
 export const updateRepo = async (req, res) => {
   try {
+    if (!req.body) {
+      return res.status(StatusCodes.BAD_REQUEST).json({ 
+        message: "Request body is missing. Check your JSON format." 
+      });
+    }
+    const { id} = req.params; 
+    const {name, description} = req.body; 
+
+    if (name !== undefined && name.trim() === "") {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: "error",
+        message: "Repository name cannot be empty"
+      });
+    }
+
+    //repo inside of the database 
+    const repo = await Repository.findById(id); 
+    if(!repo){
+      return res.status(StatusCodes.NOT_FOUND).json({message: "workspace not found"});
+    }
+
+    const okctokit = createGitHubClient(req.user.accessToken);
+
+    //update the repo in github also 
+    const githubUpdate = {
+      owner: req.user.githubUsername,
+      repo: repo.name,
+    };
+
+    if(name) githubUpdate.name = name;
+    if(description !== undefined && description !== null) githubUpdate.description = description;
+
+    await okctokit.rest.repos.update(githubUpdate);
+
+
     const updatedRepo = await Repository.findByIdAndUpdate(
       req.params.id,
       { $set: req.body },
       { new: true }
     );
+
     //@todo: after update also try to update the githbub repo via api if name/description changed
-    res.status(StatusCodes.OK).json({ status: "success", data: updatedRepo });
+    res.status(StatusCodes.OK).json({ 
+      status: "success", 
+      message: "Updated locally and on GitHub",
+      data: updatedRepo 
+    });
   } catch (error) {
     res.status(StatusCodes.BAD_REQUEST).json({ message: error.message });
   }
@@ -208,7 +248,7 @@ export const addTags = async (req, res) => {
   }
 };
 
-//@desc 8. Delete workspace or simply delete a repo
+//@desc 8. Delete workspace or simply delete a repo, this only deletes from DIR not from github
 //@route DELETE /api/repos/:id
 export const deleteRepo = async (req, res) => {
   try {
