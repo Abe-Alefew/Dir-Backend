@@ -20,9 +20,9 @@ export const getMe = async (req, res) => {
     //populate the repose
     const user = await getOrSetCache(cacheKey, async () => {
       const userData = await User.findById(userId)
-      .populate("reposOwned")
-      .select("-__v")
-      .lean();
+        .populate("reposOwned")
+        .select("-__v")
+        .lean();
       return userData;
     })
     if (!user) {
@@ -49,27 +49,27 @@ export const getUserStats = async (req, res) => {
     const cacheKey = getStatsKey(userId);
 
     // caching
-    const stats = await getOrSetCache(cacheKey, async () =>{
+    const stats = await getOrSetCache(cacheKey, async () => {
       //count number of repositories owned
-    //count the number documents in Repository collection with ownerId as userId
-    const [activeWorkspacesCount, unreadNotifications] = await Promise.all([
-      Repository.countDocuments({ ownerId: userId }),
-      Notification.countDocuments({ userId: userId, isRead: false }),
-    ]);
+      //count the number documents in Repository collection with ownerId as userId
+      const [activeWorkspacesCount, unreadNotifications] = await Promise.all([
+        Repository.countDocuments({ ownerId: userId }),
+        Notification.countDocuments({ userId: userId, isRead: false }),
+      ]);
 
-    return {
-      activeWorkspacesCount,
-      unreadNotifications,
-      githubTotalCount: req.user.githubRepoCount,
-      totalTasks: 0,
-      role:req.user.role,
-    };
+      return {
+        activeWorkspacesCount,
+        unreadNotifications,
+        githubTotalCount: req.user.githubRepoCount,
+        totalTasks: 0,
+        role: req.user.role,
+      };
     }, 600)// less TTL - 10 min cuz stats change frequently
-    
+
     res.status(StatusCodes.OK).json({
       status: "success",
       data: stats
-    }); 
+    });
   } catch (error) {
     res
       .status(StatusCodes.INTERNAL_SERVER_ERROR)
@@ -100,7 +100,7 @@ export const updatedProfile = async (req, res) => {
     ).select("-__v");
 
     //@todo: logging
-    
+
 
     // cache invalidation
     await redisClient.del(getUserKey(req.user._id))

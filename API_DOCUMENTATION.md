@@ -251,6 +251,58 @@ Response (Directory):
 }
 ```
 
+#### GET `/api/repos/:id` Response
+```json
+{
+  "status": "success",
+  "data": {
+    "_id": "60d5fa...",
+    "githubId": "12345678",
+    "githubRepoName": "awesome-project",
+    "workspaceName": "Project Alpha",
+    "members": [{ "userId": { "githubUsername": "octocat", "avatarUrl": "..." }, "role": "owner" }]
+  }
+}
+```
+
+#### PATCH `/api/repos/:id` Response
+```json
+{
+  "status": "success",
+  "message": "Updated locally and on GitHub",
+  "data": {
+    "_id": "60d5fa...",
+    "workspaceName": "New Name",
+    "description": "Updated description"
+  }
+}
+```
+
+#### DELETE `/api/repos/:id` Response
+```json
+{
+  "status": "success",
+  "message": "Removed from DIR"
+}
+```
+```json
+{
+  "status": "success",
+  "results": 1,
+  "data": [
+    {
+      "_id": "60d5fa...",
+      "githubId": "12345678",
+      "githubRepoName": "awesome-project",
+      "workspaceName": "Project Alpha",
+      "description": "My awesome project",
+      "ownerId": "60d5f9...",
+      "members": [ ... ]
+    }
+  ]
+}
+```
+
 #### Sync & Tags
 | Method | Endpoint | Description | Auth Required |
 | :--- | :--- | :--- | :--- |
@@ -272,6 +324,18 @@ Response (Directory):
 ```json
 {
   "tag": "favorites"
+}
+```
+
+#### POST `/api/repos/:id/tags` Response
+```json
+{
+  "status": "success",
+  "data": {
+    "_id": "60d5fa...",
+    "workspaceName": "Project Alpha",
+    "tags": ["favorites", "react"]
+  }
 }
 ```
 
@@ -315,14 +379,60 @@ Response (Directory):
     "total": 100,
     "repos": [
       {
-        "githubId": "123",
+        "githubId": "12345678",
         "name": "react",
         "owner": "facebook",
-        "tags": ["javascript", "library"]
+        "avatar": "https://avatars.githubusercontent.com/u/...",
+        "description": "A declarative component-based library",
+        "stars": 200000,
+        "tags": ["javascript", "library"],
+        "languages": [{ "label": "JavaScript", "value": 100, "color": "#f1e05a" }],
+        "isImported": false
       }
     ],
     "hasNextPage": true
   }
+}
+```
+
+#### GET `/api/repos/topics` Response
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "name": "javascript",
+      "label": "JavaScript",
+      "color": "#f1e05a"
+    },
+    {
+      "name": "web-development",
+      "label": "Web Development",
+      "color": "#4b5563"
+    }
+  ]
+}
+```
+
+#### POST `/api/repos/topics` Response
+```json
+{
+  "status": "success",
+  "data": {
+    "_id": "60d5f9...",
+    "name": "my-tag",
+    "description": "Custom tag",
+    "color": "#4f46e5",
+    "createdBy": "60d5f9..."
+  }
+}
+```
+
+#### DELETE `/api/repos/topics/:id` Response
+```json
+{
+  "status": "success",
+  "message": "my-tag tag removed successfully and cache cleared"
 }
 ```
 
@@ -359,6 +469,60 @@ Response (Directory):
   "path": "src/todelete.js",
   "sha": "file_sha",
   "commitMessage": "Deleted file"
+}
+```
+
+#### GET `/api/repos/languages` Response
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "label": "JavaScript",
+      "value": 65.5,
+      "color": "#f1e05a"
+    },
+    {
+      "label": "HTML",
+      "value": 34.5,
+      "color": "#e34c26"
+    }
+  ]
+}
+```
+
+#### POST `/api/repos/:id/contents` Response
+```json
+{
+  "status": "success",
+  "message": "File successfully created",
+  "data": {
+    "sha": "new_sha_123",
+    "url": "https://github.com/octocat/repo/blob/..."
+  }
+}
+```
+
+#### PUT `/api/repos/:id/contents` Response
+```json
+{
+  "status": "success",
+  "message": "File successfully committed to Github",
+  "data": {
+    "sha": "updated_sha_456",
+    "commit": "https://github.com/octocat/repo/commit/..."
+  }
+}
+```
+
+#### DELETE `/api/repos/:id/contents` Response
+```json
+{
+  "status": "success",
+  "message": "File successfully deleted from Github",
+  "data": {
+    "commit": "https://github.com/octocat/repo/commit/..."
+  }
 }
 ```
 
