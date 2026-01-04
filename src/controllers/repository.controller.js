@@ -94,6 +94,26 @@ export const importRepo = async (req, res) => {
         message: "Repository already imported",
       });
     }
+
+    //generate the secrete for handshake
+    //this is added don't forget to check it, it's added for webhook
+    const webhookSecret = crypto.randomBytes(20).toString("hex");
+
+    const octokit = createGitHubClient(req.user.accessToken);
+
+    //register the webhook on Github(send it)
+    const { data: webhook } = await octokit.rest.repos.createWebhook({
+      owner: githubOwner,
+      repo: githubRepoName,
+      config: {
+        url: `{process.env.BASE_URL}/api/webhooks/github`,
+        content_typ: "json",
+        secret: webhookSecret,
+      },
+      events: ["push", "pull_request", "issues", "star"],
+      active: true,
+    });
+
     //create new repository document to store it in repository collection
     const newRepo = await Repository.create(
       [
@@ -111,6 +131,12 @@ export const importRepo = async (req, res) => {
           channels: [
             { name: "general", channel_id: new mongoose.Types.ObjectId() },
           ],
+          //this also added for webhook
+          webhookSettings: {
+            webhookId: webhook.id.toString(),
+            secret: webhookSecret,
+            active: true,
+          },
         },
       ],
       { session }
@@ -315,14 +341,14 @@ export const updateRepo = async (req, res) => {
     const githubUpdate = {
       owner: repo.githubOwner,
       repo: repo.githubRepoName,
-      description: description
+      description: description,
     };
 
     if (description !== undefined && description !== null) {
       githubUpdate.description = description;
     }
 
-    await okctokit.rest.repos.update(githubUpdate);
+    await octokit.rest.repos.update(githubUpdate);
 
     const updatedRepo = await Repository.findByIdAndUpdate(
       req.params.id,
