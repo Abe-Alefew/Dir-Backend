@@ -5,7 +5,7 @@ let io;
 
 export const initSocket = (server) => {
     io = new Server(server, {
-        cors:{
+        cors: {
             origin: process.env.CLIENT_URL || "http://localhost:5173",
             methods: ["GET", "POST"],
         }
@@ -17,15 +17,15 @@ export const initSocket = (server) => {
         // checking token
         const token = socket.handshake.auth?.token || socket.handshake.headers.token;
 
-        if(!token){
+        if (!token) {
             return next(new Error("Authentication error: No token provided"));
         }
 
-        try{
+        try {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             socket.user = decoded;
             next();
-        }catch(error){
+        } catch (error) {
             next(new Error("Authentication error: Invalid token"));
         }
     })
@@ -37,6 +37,19 @@ export const initSocket = (server) => {
 
         // joining private user room - for any notifications
         socket.join(`user:${userId}`);
+
+        // Automatic joining via handshake query parameters
+        const { workspaceId, channelId } = socket.handshake.query;
+        if (workspaceId) {
+            socket.join(`workspace:${workspaceId}`);
+            console.log(`User ${userId} auto-joined workspace ${workspaceId}`);
+
+            if (channelId) {
+                const channelRoom = `workspace:${workspaceId}:channel:${channelId}`;
+                socket.join(channelRoom);
+                console.log(`User ${userId} auto-joined channel ${channelRoom}`);
+            }
+        }
 
         // joining the workspace room - the parent room of the channel rooms
         socket.on("joinWorkspace", (data) => {
@@ -52,14 +65,14 @@ export const initSocket = (server) => {
         });
 
         // joining the channel room - the child room of the workspace room, listening for specific chat messages
-        socket.on("joinChannel", ({workspaceId, channelId}) => {
+        socket.on("joinChannel", ({ workspaceId, channelId }) => {
             const channelRoom = `workspace:${workspaceId}:channel:${channelId}`;
             socket.join(channelRoom);
             console.log(`User ${userId} joined channel ${channelRoom}`);
         });
 
         // leaving the channel room - the child room of the workspace room, listening for specific chat messages
-        socket.on("leaveChannel", ({workspaceId, channelId}) => {
+        socket.on("leaveChannel", ({ workspaceId, channelId }) => {
             const channelRoom = `workspace:${workspaceId}:channel:${channelId}`;
             socket.leave(channelRoom);
             console.log(`User ${userId} left channel ${channelRoom}`);
@@ -82,7 +95,7 @@ export const initSocket = (server) => {
 
 // helper function
 export const getIO = () => {
-    if(!io){
+    if (!io) {
         throw new Error("Socket.io not initialized");
     }
     return io;
